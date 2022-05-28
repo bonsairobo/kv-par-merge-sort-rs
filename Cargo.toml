@@ -2,6 +2,9 @@
 name = "kv-par-merge-sort"
 version = "0.1.0"
 edition = "2021"
+description = "External sorting algorithm for (key, value) data sets."
+author = "Duncan Fairbanks"
+license = "MIT OR Apache-2.0"
 
 [profile]
 dev = { opt-level = 2 }
