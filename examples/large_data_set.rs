@@ -13,6 +13,8 @@ struct Args {
     output_dir: PathBuf,
     #[clap(short = 't', long)]
     temp_dir: PathBuf,
+    #[clap(short = 'n', long, default_value = "1000000000")]
+    num_entries: usize,
 }
 
 const MAX_SORT_CONCURRENCY: usize = 16;
@@ -36,8 +38,6 @@ fn main() {
     // let (chrome_layer, _guard) = ChromeLayerBuilder::new().build();
     // tracing_subscriber::registry().with(chrome_layer).init();
 
-    let num_entries = 1_000_000_000;
-
     let output_key_path = args.output_dir.join("keys.bin");
     let output_value_path = args.output_dir.join("values.bin");
 
@@ -51,13 +51,13 @@ fn main() {
     );
 
     let mut rng = SmallRng::from_entropy();
-    let num_chunks = (num_entries + MAX_ENTRIES_PER_CHUNK - 1) / MAX_ENTRIES_PER_CHUNK;
+    let num_chunks = (args.num_entries + MAX_ENTRIES_PER_CHUNK - 1) / MAX_ENTRIES_PER_CHUNK;
     log::info!(
         "Random input data set will contain {num_chunks} unsorted chunks \
         of at most {MAX_ENTRIES_PER_CHUNK} entries each"
     );
     let mut num_submitted = 0;
-    let mut num_entries_remaining = num_entries;
+    let mut num_entries_remaining = args.num_entries;
     while num_entries_remaining > 0 {
         let chunk_size = MAX_ENTRIES_PER_CHUNK.min(num_entries_remaining);
         let chunk_data = (0..chunk_size).map(|_| rng.gen()).collect();
