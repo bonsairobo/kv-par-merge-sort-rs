@@ -1,6 +1,6 @@
 /// An arbitrarily ordered vector of key-value pairs.
 ///
-/// Submit this to the [`SortingPipeline`] via `submit_unsorted_chunk`.
+/// Submit this to the [`SortingPipeline`](crate::SortingPipeline) via `submit_unsorted_chunk`.
 pub struct Chunk<K, V> {
     pub entries: Vec<(K, V)>,
 }
