@@ -40,6 +40,10 @@ const MERGE_K: usize = 8;
 ///
 /// **WARNING**: If you are running out of memory, make sure you can actually fit `max_sort_concurrency` [`Chunk`]s in memory.
 /// Also note that [`std::env::temp_dir`] might actually be an in-memory overlay FS.
+///
+/// # File System Usage
+///
+/// This algorithm requires twice the size of the input data in free file system space in order to perform the final merge.
 pub struct SortingPipeline<K, V> {
     unsorted_chunk_tx: Sender<Chunk<K, V>>,
     merge_initiator_thread_handle: thread::JoinHandle<Result<(), io::Error>>,
@@ -199,18 +203,18 @@ where
     // Write the sorted output to temporary files.
     let persist_span = tracing::info_span!("persist_sorted_chunk");
     let _gaurd = persist_span.enter();
-    let mut key_file = tempfile_in(tmp_dir_path)?;
-    let mut value_file = tempfile_in(tmp_dir_path)?;
-    {
-        let mut key_writer = BufWriter::with_capacity(ONE_MIB, &mut key_file);
-        let mut value_writer = BufWriter::with_capacity(ONE_MIB, &mut value_file);
-        for (k, v) in chunk.entries.into_iter() {
-            key_writer.write_all(bytes_of(&k))?;
-            value_writer.write_all(bytes_of(&v))?;
-        }
+    let mut key_writer = BufWriter::with_capacity(ONE_MIB, tempfile_in(tmp_dir_path)?);
+    let mut value_writer = BufWriter::with_capacity(ONE_MIB, tempfile_in(tmp_dir_path)?);
+    for (k, v) in chunk.entries.into_iter() {
+        key_writer.write_all(bytes_of(&k))?;
+        value_writer.write_all(bytes_of(&v))?;
     }
 
-    SortedChunkFiles::new(key_file, value_file, num_entries)
+    SortedChunkFiles::new(
+        key_writer.into_inner()?,
+        value_writer.into_inner()?,
+        num_entries,
+    )
 }
 
 // This event loop handles incoming sorted chunk files and chooses which pairs of sorted chunks to merge by sending them to a
@@ -241,17 +245,18 @@ where
         });
     }
 
-    let mut num_sorted_chunks_received = 0;
-
     let mut merge_queue = BinaryHeap::new();
 
+    let mut num_sorted_chunks_received = 0;
     // This thread has to keep track of how many merge "tasks" are pending so it knows when to stop receiving.
     let mut num_merges_started = 0;
     // This is a useful metric to see how much redundant file writing we did.
     let mut num_merges_completed = 0;
-
-    // In my dreams...
-    // let num_pending_merges = || num_merges_started - num_merges_completed;
+    macro_rules! num_pending_merges {
+        () => {
+            num_merges_started - num_merges_completed
+        };
+    }
 
     // PERF: a select! statement might be more optimal, but it's harder to implement. We expect chunk sorting to be faster than
     // merging, so we don't expect it would make a huge difference
@@ -264,9 +269,7 @@ where
         // Put it in the queue.
         merge_queue.push(sorted_chunk_result?);
 
-        while num_merges_started - num_merges_completed < max_merge_concurrency
-            && merge_queue.len() >= MERGE_K
-        {
+        while num_pending_merges!() < max_merge_concurrency && merge_queue.len() >= MERGE_K {
             let chunks: Vec<_> = (0..MERGE_K).filter_map(|_| merge_queue.pop()).collect();
             chunk_pair_tx.send(chunks).unwrap();
             num_merges_started += 1;
@@ -275,7 +278,7 @@ where
         log::info!(
             "Merge queue length = {}, # pending merges = {}",
             merge_queue.len(),
-            num_merges_started - num_merges_completed
+            num_pending_merges!()
         );
 
         // Check for completed merges without blocking.
@@ -289,11 +292,11 @@ where
     log::info!(
         "Merge queue length = {}, # pending merges = {}",
         merge_queue.len(),
-        num_merges_started - num_merges_completed
+        num_pending_merges!()
     );
 
     // Aggressively merge remaining chunks until there are fewer than MERGE_K.
-    while merge_queue.len() + num_merges_started - num_merges_completed > MERGE_K {
+    while merge_queue.len() + num_pending_merges!() > MERGE_K {
         // Find groups to merge.
         while merge_queue.len() >= MERGE_K {
             let chunks: Vec<_> = (0..MERGE_K).filter_map(|_| merge_queue.pop()).collect();
@@ -304,11 +307,11 @@ where
         log::info!(
             "Merge queue length = {}, # pending merges = {}",
             merge_queue.len(),
-            num_merges_started - num_merges_completed
+            num_pending_merges!()
         );
 
         // Wait for a single merge to finish before checking if we can start more.
-        if num_merges_started - num_merges_completed > 0 {
+        if num_pending_merges!() > 0 {
             let merged_chunk_result = merged_chunk_rx.recv().unwrap();
             num_merges_completed += 1;
             merge_queue.push(merged_chunk_result?);
@@ -316,7 +319,7 @@ where
     }
 
     // Wait for all pending merges to finish.
-    while num_merges_started - num_merges_completed > 0 {
+    while num_pending_merges!() > 0 {
         let merged_chunk_result = merged_chunk_rx.recv().unwrap();
         num_merges_completed += 1;
         merge_queue.push(merged_chunk_result?);
@@ -380,8 +383,8 @@ where
 
 fn merge_chunks<K, V>(
     chunks: Vec<SortedChunkFiles>,
-    mut merged_key_file: File,
-    mut merged_value_file: File,
+    merged_key_file: File,
+    merged_value_file: File,
 ) -> Result<SortedChunkFiles, io::Error>
 where
     K: Ord + Pod,
@@ -389,7 +392,7 @@ where
 {
     log::info!("Running merge of {} persisted chunks", chunks.len());
 
-    let span = tracing::info_span!("merge_two_persisted_chunks");
+    let span = tracing::info_span!("merge_persisted_chunks");
     let _guard = span.enter();
 
     let sum_entries = chunks.iter().map(|chunk| chunk.num_entries).sum();
@@ -405,35 +408,37 @@ where
         })
         .collect();
 
-    let mut key_writer = BufWriter::with_capacity(ONE_MIB, &mut merged_key_file);
-    let mut value_writer = BufWriter::with_capacity(ONE_MIB, &mut merged_value_file);
+    let mut key_writer = BufWriter::with_capacity(ONE_MIB, merged_key_file);
+    let mut value_writer = BufWriter::with_capacity(ONE_MIB, merged_value_file);
 
     // Initialize the first key from each file. This asserts that each chunk is not empty.
     let mut key_heap = BinaryHeap::with_capacity(readers.len());
-    for (i, reader) in readers.iter_mut().enumerate() {
+    for (i, (key_reader, _)) in readers.iter_mut().enumerate() {
         let mut key = K::zeroed();
-        debug_assert!(read_element(&mut reader.0, &mut key)?);
+        debug_assert!(read_element(key_reader, &mut key)?);
         key_heap.push((Reverse(key), i));
     }
 
     while let Some((key, chunk_index)) = key_heap.pop() {
-        let reader = &mut readers[chunk_index];
-        let mut value = V::zeroed();
+        let (key_reader, value_reader) = &mut readers[chunk_index];
         write_element(&mut key_writer, &key.0)?;
-        debug_assert!(read_element(&mut reader.1, &mut value)?);
+        let mut value = V::zeroed();
+        debug_assert!(read_element(value_reader, &mut value)?);
         write_element(&mut value_writer, &value)?;
         let mut next_key = K::zeroed();
-        if read_element(&mut reader.0, &mut next_key)? {
+        if read_element(key_reader, &mut next_key)? {
             key_heap.push((Reverse(next_key), chunk_index));
         }
     }
-    drop(key_writer);
-    drop(value_writer);
 
-    SortedChunkFiles::new(merged_key_file, merged_value_file, sum_entries)
+    SortedChunkFiles::new(
+        key_writer.into_inner()?,
+        value_writer.into_inner()?,
+        sum_entries,
+    )
 }
 
-fn write_element<T>(writer: &mut BufWriter<&mut File>, value: &T) -> Result<(), io::Error>
+fn write_element<T>(writer: &mut BufWriter<File>, value: &T) -> Result<(), io::Error>
 where
     T: Pod,
 {

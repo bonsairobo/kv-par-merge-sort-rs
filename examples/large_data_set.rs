@@ -23,7 +23,7 @@ fn main() {
     // let (chrome_layer, _guard) = ChromeLayerBuilder::new().build();
     // tracing_subscriber::registry().with(chrome_layer).init();
 
-    let num_entries = 3_000_000_000;
+    let num_entries = 2 * MAX_ENTRIES_PER_CHUNK;
 
     let temp_dir = "/run/media/duncan/ssd_data/tmp";
     let dir = PathBuf::from("/run/media/duncan/ssd_data/bench_data");
@@ -42,12 +42,18 @@ fn main() {
     );
 
     let mut rng = SmallRng::from_entropy();
-    let num_chunks = num_entries / MAX_ENTRIES_PER_CHUNK;
-    log::info!("Program will generate {num_chunks} unsorted chunks");
+    let num_chunks = (num_entries + MAX_ENTRIES_PER_CHUNK - 1) / MAX_ENTRIES_PER_CHUNK;
+    log::info!(
+        "Random input data set will contain {num_chunks} unsorted chunks \
+        of at most {MAX_ENTRIES_PER_CHUNK} entries each"
+    );
     let mut num_submitted = 0;
-    for _ in 0..num_chunks {
-        let chunk_data = (0..MAX_ENTRIES_PER_CHUNK).map(|_| rng.gen()).collect();
+    let mut num_entries_remaining = num_entries;
+    while num_entries_remaining > 0 {
+        let chunk_size = MAX_ENTRIES_PER_CHUNK.min(num_entries_remaining);
+        let chunk_data = (0..chunk_size).map(|_| rng.gen()).collect();
         pipeline.submit_unsorted_chunk(Chunk::new(chunk_data));
+        num_entries_remaining -= chunk_size;
         num_submitted += 1;
         log::debug!("# unsorted chunks submitted = {num_submitted}");
     }
