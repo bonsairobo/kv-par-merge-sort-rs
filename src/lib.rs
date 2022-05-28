@@ -226,7 +226,7 @@ where
     )
 }
 
-// This event loop handles incoming sorted chunk files and chooses which pairs of sorted chunks to merge by sending them to a
+// This event loop handles incoming sorted chunk files and chooses which groups of sorted chunks to merge by sending them to a
 // "merger" thread. The merger thread also sends the result back to this thread, creating a cycling data path, so we need to be
 // careful about liveness here.
 fn run_merge_initiator<K, V>(
