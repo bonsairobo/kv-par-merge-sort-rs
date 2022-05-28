@@ -30,8 +30,8 @@
 //!
 //! To sort an arbitrarily large data set without running out of memory, we must resort to an "external" sorting algorithm that
 //! uses the file system for scratch space; we use a parallel merge sort. Each [`Chunk`] is sorted separately, in parallel and
-//! streamed to a pair of files. These files are consumed by a merging thread, which (also in parallel) iteratively merges pairs
-//! of similarly-sized chunks.
+//! streamed to a pair of files. These files are consumed by a merging thread, which (also in parallel) iteratively merges
+//! groups of up to `merge_k` similarly-sized chunks.
 //!
 //! ## File Handles
 //!

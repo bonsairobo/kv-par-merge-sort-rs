@@ -32,8 +32,8 @@ sys     0m42.923s
 
 To sort an arbitrarily large data set without running out of memory, we must resort to an "external" sorting algorithm that
 uses the file system for scratch space; we use a parallel merge sort. Each [`Chunk`] is sorted separately, in parallel and
-streamed to a pair of files. These files are consumed by a merging thread, which (also in parallel) iteratively merges pairs
-of similarly-sized chunks.
+streamed to a pair of files. These files are consumed by a merging thread, which (also in parallel) iteratively merges
+groups of up to `merge_k` similarly-sized chunks.
 
 ### File Handles
 
@@ -47,3 +47,5 @@ Also note that [`std::env::temp_dir`] might actually be an in-memory overlay FS.
 ### File System Usage
 
 This algorithm requires twice the size of the input data in free file system space in order to perform the final merge.
+
+License: MIT OR Apache-2.0
