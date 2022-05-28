@@ -2,7 +2,7 @@
 
 ## Key-Value Parallel Merge Sort
 
-Sort [`Pod`] (key, value) data sets that don't fit in memory.
+Sort [`Pod`](bytemuck::Pod) (key, value) data sets that don't fit in memory.
 
 This crate provides the `kv_par_merge_sort` library, which enables the user to sort [`Chunk`]s of (key, value) pairs (AKA
 entries) via a [`SortingPipeline`]. The sorted output lands in two files: one for keys and one for values. The keys file is
@@ -15,7 +15,7 @@ files is to ensure correct data type alignment (for zero-copy reads) without was
 ### Sorting ~17 GB data set (half a billion entries)
 
 ```sh
-$ time RUST_LOG=debug cargo run --release --example large_data_set -- -o /run/media/duncan/ssd_data/bench_data/ -t /run/media/duncan/ssd_data/tmp/
+$ time RUST_LOG=debug cargo run --release --example large_data_set -- -o /ssd_data/bench_data/ -t /ssd_data/tmp/
 [2022-05-28T08:24:56Z INFO  large_data_set] Random input data set will contain 18 unsorted chunks of at most 28071681 entries each
 [2022-05-28T08:25:36Z INFO  large_data_set] Done generating random chunks
 [2022-05-28T08:26:00Z INFO  kv_par_merge_sort] Running merge of 16 persisted chunks
