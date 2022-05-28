@@ -15,7 +15,7 @@ files is to ensure correct data type alignment (for zero-copy reads) without was
 ### Sorting 1 billion entries
 
 ```rust
-$ time RUST_LOG=debug cargo run --release --example large_data_set
+$ time RUST_LOG=debug cargo run --release --example large_data_set -- -o /run/media/duncan/ssd_data/bench_data/ -t /run/media/duncan/ssd_data/tmp/
 Finished release [optimized] target(s) in 0.02s
 Running `target/release/examples/large_data_set`
 [2022-05-28T07:23:34Z INFO  large_data_set] Random input data set will contain 10 unsorted chunks of at most 100663296 entries each

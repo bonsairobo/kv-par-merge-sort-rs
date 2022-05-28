@@ -1,3 +1,4 @@
+use clap::Parser;
 use kv_par_merge_sort::{Chunk, SortingPipeline};
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
@@ -5,12 +6,23 @@ use std::path::PathBuf;
 // use tracing_chrome::ChromeLayerBuilder;
 // use tracing_subscriber::prelude::*;
 
+#[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    #[clap(short = 'o', long)]
+    output_dir: PathBuf,
+    #[clap(short = 't', long)]
+    temp_dir: PathBuf,
+}
+
 const MAX_SORT_CONCURRENCY: usize = 16;
 const MAX_MERGE_CONCURRENCY: usize = 8;
 const MERGE_K: usize = 16;
 const MAX_ENTRIES_PER_CHUNK: usize = 100_663_296;
 
 fn main() {
+    let args = Args::parse();
+
     // Make sure the system has enough memory to support these parameters.
     const SIXTEEN_GB: usize = 16 * (1 << 30);
     type K = u32;
@@ -26,19 +38,14 @@ fn main() {
 
     let num_entries = 1_000_000_000;
 
-    let temp_dir = "/run/media/duncan/ssd_data/tmp";
-    let dir = PathBuf::from("/run/media/duncan/ssd_data/bench_data");
-    // let temp_dir = std::env::temp_dir();
-    // let temp_dir = "/home/duncan/tmp";
-    // let dir = PathBuf::from("/home/duncan/bench_data");
-    let output_key_path = dir.join("keys.bin");
-    let output_value_path = dir.join("values.bin");
+    let output_key_path = args.output_dir.join("keys.bin");
+    let output_value_path = args.output_dir.join("values.bin");
 
     let pipeline = SortingPipeline::<K, V>::new(
         MAX_SORT_CONCURRENCY,
         MAX_MERGE_CONCURRENCY,
         MERGE_K,
-        temp_dir,
+        args.temp_dir,
         &output_key_path,
         &output_value_path,
     );
