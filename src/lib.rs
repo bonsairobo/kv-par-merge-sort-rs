@@ -29,10 +29,9 @@ const ONE_MIB: usize = 1 << 20;
 /// # Implementation
 ///
 /// To sort an arbitrarily large data set without running out of memory, we must resort to an "external" sorting algorithm that
-/// uses the file system for scratch space; we use a parallel merge sort. As key-value entries are added, they are collected
-/// into chunks no larger than `max_entries_per_chunk`. Each chunk is sorted separately, in parallel and streamed to a pair of
-/// files. These files are consumed by a merging thread, which (also in parallel) iteratively merges pairs of similarly-sized
-/// chunks.
+/// uses the file system for scratch space; we use a parallel merge sort. Each [`Chunk`] is sorted separately, in parallel and
+/// streamed to a pair of files. These files are consumed by a merging thread, which (also in parallel) iteratively merges pairs
+/// of similarly-sized chunks.
 ///
 /// # File Handles
 ///
