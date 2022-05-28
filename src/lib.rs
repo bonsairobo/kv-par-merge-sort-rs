@@ -40,7 +40,7 @@
 //! ## Memory Usage
 //!
 //! **WARNING**: If you are running out of memory, make sure you can actually fit `max_sort_concurrency` [`Chunk`]s in memory.
-//! Also note that [`std::env::temp_dir`] might actually be an in-memory overlay FS.
+//! Also note that [`std::env::temp_dir`] might actually be an in-memory `tmpfs`.
 //!
 //! ## File System Usage
 //!
