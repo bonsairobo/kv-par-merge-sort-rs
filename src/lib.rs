@@ -342,6 +342,9 @@ where
     debug_assert!(merge_queue.len() <= MERGE_K);
     let chunks: Vec<_> = (0..MERGE_K).filter_map(|_| merge_queue.pop()).collect();
     let _ = merge_chunks::<K, V>(chunks, output_key_file, output_value_file)?;
+    num_merges_completed += 1;
+
+    log::info!("Done merging! Performed {num_merges_completed} total merges");
     Ok(())
 }
 
