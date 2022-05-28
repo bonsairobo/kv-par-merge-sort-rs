@@ -337,6 +337,7 @@ where
     if merge_queue.len() == 1 {
         // Just copy the final chunk into the destination files. This should only happen if we are sorting a very small number
         // of chunks anyway.
+        log::info!("Only one chunk: just copying to output location");
         let mut final_chunk = merge_queue.pop().unwrap();
         io::copy(&mut final_chunk.key_file, &mut output_key_file)?;
         io::copy(&mut final_chunk.value_file, &mut output_value_file)?;
