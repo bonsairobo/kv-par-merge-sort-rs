@@ -268,9 +268,6 @@ where
         };
     }
 
-    // PERF: a select! statement might be more optimal, but it's harder to implement. We expect chunk sorting to be faster than
-    // merging, so we don't expect it would make a huge difference
-
     // Handle newly sorted chunks until all sort workers disconnect.
     while let Ok(sorted_chunk_result) = sorted_chunk_rx.recv() {
         num_sorted_chunks_received += 1;
