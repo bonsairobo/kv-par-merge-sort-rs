@@ -3,6 +3,7 @@ mod chunk;
 pub use chunk::Chunk;
 
 use bytemuck::{bytes_of, bytes_of_mut, Pod};
+use core::cmp::Reverse;
 use crossbeam_channel::{bounded, unbounded, Receiver, Sender};
 use std::collections::BinaryHeap;
 use std::fs::File;
@@ -12,9 +13,7 @@ use std::thread;
 use tempfile::tempfile_in;
 
 const ONE_MIB: usize = 1 << 20;
-
-// PERF: the current bottleneck is file write thoughput; the best way to help this is to write less. The total amount of data
-// written is proportional to the height of the "merge tree". We approximate a binary merge tree because we use binary merges.
+const MERGE_K: usize = 8;
 
 // PERF: for *large* values, would it be faster to do the entire external sort on (key, value *ID*) pairs first, then use the
 // sorted value IDs to swap around the values in one large value file?
@@ -228,12 +227,6 @@ where
     K: Ord + Pod,
     V: Pod,
 {
-    // The policy for merging while chunk sorting hasn't completed is to wait for this minimum number of sorted chunks to exist
-    // in our priority queue before trying to merge the two smallest chunks. This gives some probabilistic guarantee that we'll
-    // find a good pair of chunks to merge, i.e. the chunks are nearly the same size.
-    const MIN_CHUNK_POPULATION_FOR_OPTIMISTIC_MERGE: usize = 8;
-    assert!(MIN_CHUNK_POPULATION_FOR_OPTIMISTIC_MERGE >= 2); // For correctness.
-
     // No need for a long buffer here, since we don't have any low latency requirements.
     let (chunk_pair_tx, chunk_pair_rx) = bounded(1);
     // Unbounded to avoid deadlock.
@@ -271,13 +264,11 @@ where
         // Put it in the queue.
         merge_queue.push(sorted_chunk_result?);
 
-        // Optimistically merge the two smallest chunks in the queue.
         while num_merges_started - num_merges_completed < max_merge_concurrency
-            && merge_queue.len() >= MIN_CHUNK_POPULATION_FOR_OPTIMISTIC_MERGE
+            && merge_queue.len() >= MERGE_K
         {
-            let lhs = merge_queue.pop().unwrap();
-            let rhs = merge_queue.pop().unwrap();
-            chunk_pair_tx.send([lhs, rhs]).unwrap();
+            let chunks: Vec<_> = (0..MERGE_K).filter_map(|_| merge_queue.pop()).collect();
+            chunk_pair_tx.send(chunks).unwrap();
             num_merges_started += 1;
         }
 
@@ -295,23 +286,18 @@ where
     }
     // Sort workers disconnected.
     log::info!("All chunks sorted, only merge work remains");
-    if merge_queue.is_empty() {
-        return Ok(());
-    }
-
     log::info!(
         "Merge queue length = {}, # pending merges = {}",
         merge_queue.len(),
         num_merges_started - num_merges_completed
     );
 
-    // Aggressively merge remaining chunks until there are only 2 left.
-    while merge_queue.len() + num_merges_started - num_merges_completed > 2 {
-        // Find pairs to merge.
-        while merge_queue.len() >= 2 {
-            let lhs = merge_queue.pop().unwrap();
-            let rhs = merge_queue.pop().unwrap();
-            chunk_pair_tx.send([lhs, rhs]).unwrap();
+    // Aggressively merge remaining chunks until there are fewer than MERGE_K.
+    while merge_queue.len() + num_merges_started - num_merges_completed > MERGE_K {
+        // Find groups to merge.
+        while merge_queue.len() >= MERGE_K {
+            let chunks: Vec<_> = (0..MERGE_K).filter_map(|_| merge_queue.pop()).collect();
+            chunk_pair_tx.send(chunks).unwrap();
             num_merges_started += 1;
         }
 
@@ -339,6 +325,10 @@ where
     let mut output_key_file = File::create(output_key_path)?;
     let mut output_value_file = File::create(output_value_path)?;
 
+    if merge_queue.is_empty() {
+        return Ok(());
+    }
+
     if merge_queue.len() == 1 {
         // Just copy the final chunk into the destination files. This should only happen if we are sorting a very small number
         // of chunks anyway.
@@ -348,49 +338,45 @@ where
         return Ok(());
     }
 
-    // Merge the final two chunks into the output file.
-    debug_assert_eq!(merge_queue.len(), 2);
-    let lhs = merge_queue.pop().unwrap();
-    let rhs = merge_queue.pop().unwrap();
-    let _ = merge_chunks::<K, V>(lhs, rhs, output_key_file, output_value_file)?;
+    // Merge the final chunks into the output file.
+    debug_assert!(merge_queue.len() <= MERGE_K);
+    let chunks: Vec<_> = (0..MERGE_K).filter_map(|_| merge_queue.pop()).collect();
+    let _ = merge_chunks::<K, V>(chunks, output_key_file, output_value_file)?;
     Ok(())
 }
 
 fn run_merger<K, V>(
     tmp_dir_path: &Path,
-    chunk_pair_rx: Receiver<[SortedChunkFiles; 2]>,
+    chunk_pair_rx: Receiver<Vec<SortedChunkFiles>>,
     merged_chunk_tx: Sender<Result<SortedChunkFiles, io::Error>>,
 ) where
     K: Ord + Pod,
     V: Pod,
 {
-    while let Ok([lhs, rhs]) = chunk_pair_rx.recv() {
+    while let Ok(chunks) = chunk_pair_rx.recv() {
         merged_chunk_tx
-            .send(merge_chunks_into_tempfiles::<K, V>(tmp_dir_path, lhs, rhs))
+            .send(merge_chunks_into_tempfiles::<K, V>(tmp_dir_path, chunks))
             .unwrap();
     }
 }
 
 fn merge_chunks_into_tempfiles<K, V>(
     tmp_dir_path: &Path,
-    lhs: SortedChunkFiles,
-    rhs: SortedChunkFiles,
+    chunks: Vec<SortedChunkFiles>,
 ) -> Result<SortedChunkFiles, io::Error>
 where
     K: Ord + Pod,
     V: Pod,
 {
     merge_chunks::<K, V>(
-        lhs,
-        rhs,
+        chunks,
         tempfile_in(tmp_dir_path)?,
         tempfile_in(tmp_dir_path)?,
     )
 }
 
 fn merge_chunks<K, V>(
-    lhs: SortedChunkFiles,
-    rhs: SortedChunkFiles,
+    chunks: Vec<SortedChunkFiles>,
     mut merged_key_file: File,
     mut merged_value_file: File,
 ) -> Result<SortedChunkFiles, io::Error>
@@ -401,61 +387,45 @@ where
     let span = tracing::info_span!("merge_two_persisted_chunks");
     let _guard = span.enter();
 
+    let sum_entries = chunks.iter().map(|chunk| chunk.num_entries).sum();
+
     // Merge the files without reading their entire contents into memory.
+    let mut readers: Vec<_> = chunks
+        .into_iter()
+        .map(|chunk| {
+            (
+                BufReader::with_capacity(ONE_MIB, chunk.key_file),
+                BufReader::with_capacity(ONE_MIB, chunk.value_file),
+            )
+        })
+        .collect();
+
     let mut key_writer = BufWriter::with_capacity(ONE_MIB, &mut merged_key_file);
     let mut value_writer = BufWriter::with_capacity(ONE_MIB, &mut merged_value_file);
-    let mut lhs_key_reader = BufReader::with_capacity(ONE_MIB, lhs.key_file);
-    let mut lhs_value_reader = BufReader::with_capacity(ONE_MIB, lhs.value_file);
-    let mut rhs_key_reader = BufReader::with_capacity(ONE_MIB, rhs.key_file);
-    let mut rhs_value_reader = BufReader::with_capacity(ONE_MIB, rhs.value_file);
 
     // Initialize the first key from each file. This asserts that each chunk is not empty.
-    let mut lhs_key = K::zeroed();
-    let mut rhs_key = K::zeroed();
-    debug_assert!(read_element(&mut lhs_key_reader, &mut lhs_key)?);
-    debug_assert!(read_element(&mut rhs_key_reader, &mut rhs_key)?);
-
-    let mut value = V::zeroed();
-    let remainder;
-    loop {
-        if lhs_key <= rhs_key {
-            write_element(&mut key_writer, &lhs_key)?;
-            debug_assert!(read_element(&mut lhs_value_reader, &mut value)?);
-            write_element(&mut value_writer, &value)?;
-            if !read_element(&mut lhs_key_reader, &mut lhs_key)? {
-                // Consume the rest of RHS readers.
-                write_element(&mut key_writer, &rhs_key)?;
-                remainder = (rhs_key_reader, rhs_value_reader);
-                break;
-            }
-        } else {
-            write_element(&mut key_writer, &rhs_key)?;
-            debug_assert!(read_element(&mut rhs_value_reader, &mut value)?);
-            write_element(&mut value_writer, &value)?;
-            if !read_element(&mut rhs_key_reader, &mut rhs_key)? {
-                // Consume the rest of LHS readers.
-                write_element(&mut key_writer, &lhs_key)?;
-                remainder = (lhs_key_reader, lhs_value_reader);
-                break;
-            }
-        };
+    let mut key_heap = BinaryHeap::with_capacity(readers.len());
+    for (i, reader) in readers.iter_mut().enumerate() {
+        let mut key = K::zeroed();
+        debug_assert!(read_element(&mut reader.0, &mut key)?);
+        key_heap.push((Reverse(key), i));
     }
-    let (mut key_reader, mut value_reader) = remainder;
-    debug_assert!(read_element(&mut value_reader, &mut value)?);
-    write_element(&mut value_writer, &value)?;
-    while read_element(&mut key_reader, &mut rhs_key)? {
-        write_element(&mut key_writer, &rhs_key)?;
-        debug_assert!(read_element(&mut value_reader, &mut value)?);
+
+    while let Some((key, chunk_index)) = key_heap.pop() {
+        let reader = &mut readers[chunk_index];
+        let mut value = V::zeroed();
+        write_element(&mut key_writer, &key.0)?;
+        debug_assert!(read_element(&mut reader.1, &mut value)?);
         write_element(&mut value_writer, &value)?;
+        let mut next_key = K::zeroed();
+        if read_element(&mut reader.0, &mut next_key)? {
+            key_heap.push((Reverse(next_key), chunk_index));
+        }
     }
     drop(key_writer);
     drop(value_writer);
 
-    SortedChunkFiles::new(
-        merged_key_file,
-        merged_value_file,
-        lhs.num_entries + rhs.num_entries,
-    )
+    SortedChunkFiles::new(merged_key_file, merged_value_file, sum_entries)
 }
 
 fn write_element<T>(writer: &mut BufWriter<&mut File>, value: &T) -> Result<(), io::Error>

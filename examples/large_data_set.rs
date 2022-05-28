@@ -2,8 +2,8 @@ use kv_par_merge_sort::{Chunk, SortingPipeline};
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use std::path::PathBuf;
-use tracing_chrome::ChromeLayerBuilder;
-use tracing_subscriber::prelude::*;
+// use tracing_chrome::ChromeLayerBuilder;
+// use tracing_subscriber::prelude::*;
 
 const MAX_SORT_CONCURRENCY: usize = 16;
 const MAX_MERGE_CONCURRENCY: usize = 8;
@@ -19,11 +19,11 @@ fn main() {
     let total_size = chunk_size * (MAX_SORT_CONCURRENCY + 1);
     assert!(total_size < SIXTEEN_GB, "{total_size} > {SIXTEEN_GB}");
 
-    // env_logger::init();
-    let (chrome_layer, _guard) = ChromeLayerBuilder::new().build();
-    tracing_subscriber::registry().with(chrome_layer).init();
+    env_logger::init();
+    // let (chrome_layer, _guard) = ChromeLayerBuilder::new().build();
+    // tracing_subscriber::registry().with(chrome_layer).init();
 
-    let num_entries = 1_000_000_000;
+    let num_entries = 10_000_000_000;
 
     let temp_dir = "/run/media/duncan/ssd_data/tmp";
     let dir = PathBuf::from("/run/media/duncan/ssd_data/bench_data");
