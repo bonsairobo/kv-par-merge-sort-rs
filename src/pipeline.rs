@@ -22,24 +22,30 @@ pub struct SortingPipeline<K, V> {
     merge_initiator_thread_handle: thread::JoinHandle<Result<(), io::Error>>,
 }
 
+/// Performance-tuning parameters for [`SortingPipeline`].
+pub struct Config {
+    /// The maximum number of [`Chunk`]s that can be sorted (and persisted) concurrently.
+    pub max_sort_concurrency: usize,
+    /// The maximum number of merge operations that can occur concurrently.
+    pub max_merge_concurrency: usize,
+    /// The maximum number of sorted chunks that can participate in a merge operation.
+    pub merge_k: usize,
+}
+
 impl<K, V> SortingPipeline<K, V>
 where
     K: Ord + Pod + Send,
     V: Pod + Send,
 {
-    /// - `max_sort_concurrency`: The maximum number of [`Chunk`]s that can be sorted (and persisted) concurrently.
-    /// - `max_merge_concurrency`: The maximum number of merge operations that can occur concurrently.
-    /// - `merge_k`: The maximum number of sorted chunks that can participate in a merge operation.
     pub fn new(
-        max_sort_concurrency: usize,
-        max_merge_concurrency: usize,
-        merge_k: usize,
+        config: Config,
         tmp_dir_path: impl AsRef<Path>,
         output_key_path: impl AsRef<Path>,
         output_value_path: impl AsRef<Path>,
     ) -> Self {
-        assert!(max_sort_concurrency > 0);
-        assert!(max_merge_concurrency > 0);
+        assert!(config.max_sort_concurrency > 0);
+        assert!(config.max_merge_concurrency > 0);
+        assert!(config.merge_k > 1);
 
         let tmp_dir_path = tmp_dir_path.as_ref().to_owned();
         let output_key_path = output_key_path.as_ref().to_owned();
@@ -52,7 +58,7 @@ where
         // CPU-bound and merging is IO-bound, we allow this buffer to get quite large so that sorting doesn't get blocked on IO.
         let (sorted_chunk_tx, sorted_chunk_rx) = bounded(1024);
 
-        for _ in 0..max_sort_concurrency {
+        for _ in 0..config.max_sort_concurrency {
             let this_tmp_dir_path = tmp_dir_path.clone();
             let this_unsorted_chunk_rx = unsorted_chunk_rx.clone();
             let this_sorted_chunk_tx = sorted_chunk_tx.clone();
@@ -71,8 +77,8 @@ where
                 tmp_dir_path,
                 &output_key_path,
                 &output_value_path,
-                max_merge_concurrency,
-                merge_k,
+                config.max_merge_concurrency,
+                config.merge_k,
                 sorted_chunk_rx,
             );
             if result.is_err() {

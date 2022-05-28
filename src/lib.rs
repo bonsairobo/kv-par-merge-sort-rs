@@ -69,7 +69,11 @@ mod tests {
 
     // For sake of functionality, make sure concurrency is not necessary for liveness. We rely on benchmarks for concurrency
     // testing.
-    const MAX_CONCURRENCY: usize = 1;
+    const CONFIG: Config = Config {
+        max_sort_concurrency: 1,
+        max_merge_concurrency: 1,
+        merge_k: 2,
+    };
 
     fn sorting_pipeline_test<K, V>(
         add_entries: impl FnOnce(&mut SortingPipeline<K, V>),
@@ -83,9 +87,7 @@ mod tests {
         let output_key_path = dir.path().join("keys");
         let output_value_path = dir.path().join("values");
         let mut pipeline = SortingPipeline::new(
-            MAX_CONCURRENCY,
-            MAX_CONCURRENCY,
-            2,
+            CONFIG,
             std::env::temp_dir(),
             &output_key_path,
             &output_value_path,

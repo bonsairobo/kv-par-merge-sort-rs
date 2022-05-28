@@ -1,5 +1,5 @@
 use clap::Parser;
-use kv_par_merge_sort::{Chunk, SortingPipeline};
+use kv_par_merge_sort::{Chunk, Config, SortingPipeline};
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use std::path::PathBuf;
@@ -17,16 +17,18 @@ struct Args {
     num_entries: usize,
 }
 
-const MAX_SORT_CONCURRENCY: usize = 16;
-const MAX_MERGE_CONCURRENCY: usize = 8;
-const MERGE_K: usize = 16;
+const CONFIG: Config = Config {
+    max_sort_concurrency: 16,
+    max_merge_concurrency: 8,
+    merge_k: 16,
+};
 type K = [u8; 12];
 type V = [u8; 24];
 
 // Make sure to use at most 16 GiB of memory.
 const SIXTEEN_GIB: usize = 16 * (1 << 30);
 const ENTRY_SIZE: usize = std::mem::size_of::<(K, V)>();
-const CHUNK_SIZE: usize = SIXTEEN_GIB / (MAX_SORT_CONCURRENCY + 1);
+const CHUNK_SIZE: usize = SIXTEEN_GIB / (CONFIG.max_sort_concurrency + 1);
 const MAX_ENTRIES_PER_CHUNK: usize = CHUNK_SIZE / ENTRY_SIZE;
 
 fn main() {
@@ -39,14 +41,8 @@ fn main() {
     let output_key_path = args.output_dir.join("keys.bin");
     let output_value_path = args.output_dir.join("values.bin");
 
-    let pipeline = SortingPipeline::<K, V>::new(
-        MAX_SORT_CONCURRENCY,
-        MAX_MERGE_CONCURRENCY,
-        MERGE_K,
-        args.temp_dir,
-        &output_key_path,
-        &output_value_path,
-    );
+    let pipeline =
+        SortingPipeline::<K, V>::new(CONFIG, args.temp_dir, &output_key_path, &output_value_path);
 
     let mut rng = SmallRng::from_entropy();
     let num_chunks = (args.num_entries + MAX_ENTRIES_PER_CHUNK - 1) / MAX_ENTRIES_PER_CHUNK;
