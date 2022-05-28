@@ -1,5 +1,5 @@
 use clap::Parser;
-use kv_par_merge_sort::{Chunk, Config, SortingPipeline};
+use kv_par_merge_sort::{chunk_max_entries_from_memory_limit, Chunk, Config, SortingPipeline};
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use std::path::PathBuf;
@@ -27,9 +27,6 @@ type V = [u8; 24];
 
 // Make sure to use at most 16 GiB of memory.
 const SIXTEEN_GIB: usize = 16 * (1 << 30);
-const ENTRY_SIZE: usize = std::mem::size_of::<(K, V)>();
-const CHUNK_SIZE: usize = SIXTEEN_GIB / (CONFIG.max_sort_concurrency + 1);
-const MAX_ENTRIES_PER_CHUNK: usize = CHUNK_SIZE / ENTRY_SIZE;
 
 fn main() {
     let args = Args::parse();
@@ -44,16 +41,19 @@ fn main() {
     let pipeline =
         SortingPipeline::<K, V>::new(CONFIG, args.temp_dir, &output_key_path, &output_value_path);
 
+    let max_entries_per_chunk =
+        chunk_max_entries_from_memory_limit::<K, V>(SIXTEEN_GIB, CONFIG.max_sort_concurrency);
+
     let mut rng = SmallRng::from_entropy();
-    let num_chunks = (args.num_entries + MAX_ENTRIES_PER_CHUNK - 1) / MAX_ENTRIES_PER_CHUNK;
+    let num_chunks = (args.num_entries + max_entries_per_chunk - 1) / max_entries_per_chunk;
     log::info!(
         "Random input data set will contain {num_chunks} unsorted chunks \
-        of at most {MAX_ENTRIES_PER_CHUNK} entries each"
+        of at most {max_entries_per_chunk} entries each"
     );
     let mut num_submitted = 0;
     let mut num_entries_remaining = args.num_entries;
     while num_entries_remaining > 0 {
-        let chunk_size = MAX_ENTRIES_PER_CHUNK.min(num_entries_remaining);
+        let chunk_size = max_entries_per_chunk.min(num_entries_remaining);
         let chunk_data = (0..chunk_size).map(|_| rng.gen()).collect();
         pipeline.submit_unsorted_chunk(Chunk::new(chunk_data));
         num_entries_remaining -= chunk_size;

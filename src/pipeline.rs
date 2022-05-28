@@ -32,6 +32,17 @@ pub struct Config {
     pub merge_k: usize,
 }
 
+/// Given some memory limit `limit_bytes` and desired `max_sort_concurrency`, calculates the maximum possible number of entries
+/// per chunk so that a [`SortingPipeline`] does not exceed the memory limit.
+pub fn chunk_max_entries_from_memory_limit<K, V>(
+    limit_bytes: usize,
+    max_sort_concurrency: usize,
+) -> usize {
+    let entry_size = std::mem::size_of::<(K, V)>();
+    let chunk_size = limit_bytes / (max_sort_concurrency + 1);
+    chunk_size / entry_size
+}
+
 impl<K, V> SortingPipeline<K, V>
 where
     K: Ord + Pod + Send,
