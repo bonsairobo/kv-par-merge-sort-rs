@@ -23,7 +23,7 @@ fn main() {
     // let (chrome_layer, _guard) = ChromeLayerBuilder::new().build();
     // tracing_subscriber::registry().with(chrome_layer).init();
 
-    let num_entries = 10_000_000_000;
+    let num_entries = 5_000_000_000;
 
     let temp_dir = "/run/media/duncan/ssd_data/tmp";
     let dir = PathBuf::from("/run/media/duncan/ssd_data/bench_data");

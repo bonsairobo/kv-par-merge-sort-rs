@@ -384,6 +384,8 @@ where
     K: Ord + Pod,
     V: Pod,
 {
+    log::info!("Running merge of {} persisted chunks", chunks.len());
+
     let span = tracing::info_span!("merge_two_persisted_chunks");
     let _guard = span.enter();
 
