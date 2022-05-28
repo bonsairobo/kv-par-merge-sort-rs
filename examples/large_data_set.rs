@@ -20,19 +20,17 @@ struct Args {
 const MAX_SORT_CONCURRENCY: usize = 16;
 const MAX_MERGE_CONCURRENCY: usize = 8;
 const MERGE_K: usize = 16;
-const MAX_ENTRIES_PER_CHUNK: usize = 100_663_296;
+type K = [u8; 12];
+type V = [u8; 24];
+
+// Make sure to use at most 16 GiB of memory.
+const SIXTEEN_GIB: usize = 16 * (1 << 30);
+const ENTRY_SIZE: usize = std::mem::size_of::<(K, V)>();
+const CHUNK_SIZE: usize = SIXTEEN_GIB / (MAX_SORT_CONCURRENCY + 1);
+const MAX_ENTRIES_PER_CHUNK: usize = CHUNK_SIZE / ENTRY_SIZE;
 
 fn main() {
     let args = Args::parse();
-
-    // Make sure the system has enough memory to support these parameters.
-    const SIXTEEN_GB: usize = 16 * (1 << 30);
-    type K = u32;
-    type V = u32;
-    let entry_size = std::mem::size_of::<K>() + std::mem::size_of::<V>();
-    let chunk_size = MAX_ENTRIES_PER_CHUNK * entry_size;
-    let total_size = chunk_size * (MAX_SORT_CONCURRENCY + 1);
-    assert!(total_size < SIXTEEN_GB, "{total_size} > {SIXTEEN_GB}");
 
     env_logger::init();
     // let (chrome_layer, _guard) = ChromeLayerBuilder::new().build();
