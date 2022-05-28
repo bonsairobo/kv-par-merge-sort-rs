@@ -5,6 +5,7 @@ edition = "2021"
 description = "External sorting algorithm for (key, value) data sets."
 author = "Duncan Fairbanks"
 license = "MIT OR Apache-2.0"
+repository = "https://github.com/bonsairobo/kv-par-merge-sort-rs"
 
 [profile]
 dev = { opt-level = 2 }
