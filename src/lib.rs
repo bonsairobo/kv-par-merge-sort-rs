@@ -62,8 +62,8 @@ impl SortedChunkFiles {
         mut value_file: File,
         num_entries: usize,
     ) -> Result<Self, io::Error> {
-        key_file.seek(io::SeekFrom::Start(0))?;
-        value_file.seek(io::SeekFrom::Start(0))?;
+        key_file.rewind()?;
+        value_file.rewind()?;
         Ok(Self {
             key_file,
             value_file,
@@ -295,7 +295,7 @@ where
         num_pending_merges!()
     );
 
-    // Aggressively merge remaining chunks until there are fewer than MERGE_K.
+    // Aggressively merge remaining chunks until there are at most MERGE_K.
     while merge_queue.len() + num_pending_merges!() > MERGE_K {
         // Find groups to merge.
         while merge_queue.len() >= MERGE_K {
@@ -342,12 +342,12 @@ where
     }
 
     // Merge the final chunks into the output file.
-    debug_assert!(merge_queue.len() <= MERGE_K);
+    assert!(merge_queue.len() <= MERGE_K);
     let chunks: Vec<_> = (0..MERGE_K).filter_map(|_| merge_queue.pop()).collect();
     let _ = merge_chunks::<K, V>(chunks, output_key_file, output_value_file)?;
     num_merges_completed += 1;
 
-    log::info!("Done merging! Performed {num_merges_completed} total merges");
+    log::info!("Done merging! Performed {num_merges_completed} merge(s) total");
     Ok(())
 }
 
@@ -415,7 +415,7 @@ where
     let mut key_heap = BinaryHeap::with_capacity(readers.len());
     for (i, (key_reader, _)) in readers.iter_mut().enumerate() {
         let mut key = K::zeroed();
-        debug_assert!(read_element(key_reader, &mut key)?);
+        assert!(read_element(key_reader, &mut key)?);
         key_heap.push((Reverse(key), i));
     }
 
@@ -423,7 +423,7 @@ where
         let (key_reader, value_reader) = &mut readers[chunk_index];
         write_element(&mut key_writer, &key.0)?;
         let mut value = V::zeroed();
-        debug_assert!(read_element(value_reader, &mut value)?);
+        assert!(read_element(value_reader, &mut value)?);
         write_element(&mut value_writer, &value)?;
         let mut next_key = K::zeroed();
         if read_element(key_reader, &mut next_key)? {
