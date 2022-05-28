@@ -10,6 +10,23 @@
 //! out as `[k[a], k[b], ...]` and `[v[a], v[b], ...]` respectively, such that the key array is sorted. The reason for separate
 //! files is to ensure correct data type alignment (for zero-copy reads) without wasting space to padding.
 //!
+//! ## Sorting 1 billion entries
+//!
+//! ```
+//! $ time RUST_LOG=debug cargo run --release --example large_data_set
+//! Finished release [optimized] target(s) in 0.02s
+//! Running `target/release/examples/large_data_set`
+//! [2022-05-28T07:23:34Z INFO  large_data_set] Random input data set will contain 10 unsorted chunks of at most 100663296 entries each
+//! [2022-05-28T07:23:44Z INFO  large_data_set] Done generating random chunks
+//! [2022-05-28T07:24:11Z INFO  kv_par_merge_sort] All chunks sorted, only merge work remains
+//! [2022-05-28T07:24:12Z INFO  kv_par_merge_sort] Running merge of 10 persisted chunks
+//! [2022-05-28T07:25:03Z INFO  kv_par_merge_sort] Done merging! Performed 1 merge(s) total
+//!
+//! real    1m28.638s
+//! user    2m23.828s
+//! sys     0m15.272s
+//! ```
+//!
 //! ## Implementation
 //!
 //! To sort an arbitrarily large data set without running out of memory, we must resort to an "external" sorting algorithm that
