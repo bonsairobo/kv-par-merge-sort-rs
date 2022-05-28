@@ -3,7 +3,7 @@ name = "kv-par-merge-sort"
 version = "0.1.0"
 edition = "2021"
 description = "External sorting algorithm for (key, value) data sets."
-author = "Duncan Fairbanks"
+authors = ["Duncan Fairbanks"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/bonsairobo/kv-par-merge-sort-rs"
 

@@ -90,7 +90,7 @@ where
 
     /// Enqueues `chunk` for sorting.
     ///
-    /// Sorting will occur automatically in the background. But sorting is only gauranteed to complete after calling `finish`.
+    /// Sorting will occur automatically in the background. But sorting is only guaranteed to complete after calling `finish`.
     pub fn submit_unsorted_chunk(&self, chunk: Chunk<K, V>) {
         if chunk.is_empty() {
             return;
