@@ -103,7 +103,8 @@ where
     V: Pod + Send,
 {
     /// - `max_sort_concurrency`: The maximum number of [`Chunk`]s that can be sorted (and persisted) concurrently.
-    /// - `max_merge_concurrency`: The maximum number of [`Chunk`] *pairs* that can be merged concurrently.
+    /// - `max_merge_concurrency`: The maximum number of merge operations that can occur concurrently.
+    /// - `merge_k`: The maximum number of sorted chunks that can participate in a merge operation.
     pub fn new(
         max_sort_concurrency: usize,
         max_merge_concurrency: usize,
