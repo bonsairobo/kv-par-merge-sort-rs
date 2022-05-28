@@ -178,14 +178,10 @@ fn run_sorter<K, V>(
     K: Ord + Pod,
     V: Pod,
 {
-    let span = tracing::info_span!("sort_chunk");
-
     while let Ok(unsorted_chunk) = unsorted_chunk_rx.recv() {
-        span.in_scope(|| {
-            sorted_chunk_tx
-                .send(sort_and_persist_chunk(tmp_dir_path, unsorted_chunk))
-                .unwrap();
-        });
+        sorted_chunk_tx
+            .send(sort_and_persist_chunk(tmp_dir_path, unsorted_chunk))
+            .unwrap();
     }
 }
 
@@ -197,10 +193,14 @@ where
     K: Ord + Pod,
     V: Pod,
 {
-    chunk.sort();
+    let sort_span = tracing::info_span!("sort_chunk");
+    sort_span.in_scope(|| chunk.sort());
+
     let num_entries = chunk.len();
 
     // Write the sorted output to temporary files.
+    let persist_span = tracing::info_span!("persist_sorted_chunk");
+    let _gaurd = persist_span.enter();
     let mut key_file = tempfile_in(tmp_dir_path)?;
     let mut value_file = tempfile_in(tmp_dir_path)?;
     {
@@ -365,14 +365,10 @@ fn run_merger<K, V>(
     K: Ord + Pod,
     V: Pod,
 {
-    let span = tracing::info_span!("merge_two_persisted_chunks");
-
     while let Ok([lhs, rhs]) = chunk_pair_rx.recv() {
-        span.in_scope(|| {
-            merged_chunk_tx
-                .send(merge_chunks_into_tempfiles::<K, V>(tmp_dir_path, lhs, rhs))
-                .unwrap();
-        });
+        merged_chunk_tx
+            .send(merge_chunks_into_tempfiles::<K, V>(tmp_dir_path, lhs, rhs))
+            .unwrap();
     }
 }
 
@@ -403,6 +399,9 @@ where
     K: Ord + Pod,
     V: Pod,
 {
+    let span = tracing::info_span!("merge_two_persisted_chunks");
+    let _guard = span.enter();
+
     // Merge the files without reading their entire contents into memory.
     let mut key_writer = BufWriter::with_capacity(ONE_MIB, &mut merged_key_file);
     let mut value_writer = BufWriter::with_capacity(ONE_MIB, &mut merged_value_file);
