@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 const MAX_SORT_CONCURRENCY: usize = 16;
 const MAX_MERGE_CONCURRENCY: usize = 8;
+const MERGE_K: usize = 16;
 const MAX_ENTRIES_PER_CHUNK: usize = 100_663_296;
 
 fn main() {
@@ -36,6 +37,7 @@ fn main() {
     let pipeline = SortingPipeline::<K, V>::new(
         MAX_SORT_CONCURRENCY,
         MAX_MERGE_CONCURRENCY,
+        MERGE_K,
         temp_dir,
         &output_key_path,
         &output_value_path,

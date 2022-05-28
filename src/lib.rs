@@ -13,7 +13,6 @@ use std::thread;
 use tempfile::tempfile_in;
 
 const ONE_MIB: usize = 1 << 20;
-const MERGE_K: usize = 8;
 
 // PERF: for *large* values, would it be faster to do the entire external sort on (key, value *ID*) pairs first, then use the
 // sorted value IDs to swap around the values in one large value file?
@@ -100,6 +99,7 @@ where
     pub fn new(
         max_sort_concurrency: usize,
         max_merge_concurrency: usize,
+        merge_k: usize,
         tmp_dir_path: impl AsRef<Path>,
         output_key_path: impl AsRef<Path>,
         output_value_path: impl AsRef<Path>,
@@ -138,6 +138,7 @@ where
                 &output_key_path,
                 &output_value_path,
                 max_merge_concurrency,
+                merge_k,
                 sorted_chunk_rx,
             );
             if result.is_err() {
@@ -225,6 +226,7 @@ fn run_merge_initiator<K, V>(
     output_key_path: &Path,
     output_value_path: &Path,
     max_merge_concurrency: usize,
+    merge_k: usize,
     sorted_chunk_rx: Receiver<Result<SortedChunkFiles, io::Error>>,
 ) -> Result<(), io::Error>
 where
@@ -269,8 +271,8 @@ where
         // Put it in the queue.
         merge_queue.push(sorted_chunk_result?);
 
-        while num_pending_merges!() < max_merge_concurrency && merge_queue.len() >= MERGE_K {
-            let chunks: Vec<_> = (0..MERGE_K).filter_map(|_| merge_queue.pop()).collect();
+        while num_pending_merges!() < max_merge_concurrency && merge_queue.len() >= merge_k {
+            let chunks: Vec<_> = (0..merge_k).filter_map(|_| merge_queue.pop()).collect();
             chunk_pair_tx.send(chunks).unwrap();
             num_merges_started += 1;
         }
@@ -295,11 +297,11 @@ where
         num_pending_merges!()
     );
 
-    // Aggressively merge remaining chunks until there are at most MERGE_K.
-    while merge_queue.len() + num_pending_merges!() > MERGE_K {
+    // Aggressively merge remaining chunks until there are at most merge_k.
+    while merge_queue.len() + num_pending_merges!() > merge_k {
         // Find groups to merge.
-        while merge_queue.len() >= MERGE_K {
-            let chunks: Vec<_> = (0..MERGE_K).filter_map(|_| merge_queue.pop()).collect();
+        while merge_queue.len() >= merge_k {
+            let chunks: Vec<_> = (0..merge_k).filter_map(|_| merge_queue.pop()).collect();
             chunk_pair_tx.send(chunks).unwrap();
             num_merges_started += 1;
         }
@@ -342,8 +344,8 @@ where
     }
 
     // Merge the final chunks into the output file.
-    assert!(merge_queue.len() <= MERGE_K);
-    let chunks: Vec<_> = (0..MERGE_K).filter_map(|_| merge_queue.pop()).collect();
+    assert!(merge_queue.len() <= merge_k);
+    let chunks: Vec<_> = (0..merge_k).filter_map(|_| merge_queue.pop()).collect();
     let _ = merge_chunks::<K, V>(chunks, output_key_file, output_value_file)?;
     num_merges_completed += 1;
 
@@ -487,6 +489,7 @@ mod tests {
         let mut pipeline = SortingPipeline::new(
             MAX_CONCURRENCY,
             MAX_CONCURRENCY,
+            2,
             std::env::temp_dir(),
             &output_key_path,
             &output_value_path,
