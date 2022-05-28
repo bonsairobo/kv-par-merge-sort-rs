@@ -10,21 +10,20 @@
 //! out as `[k[a], k[b], ...]` and `[v[a], v[b], ...]` respectively, such that the key array is sorted. The reason for separate
 //! files is to ensure correct data type alignment (for zero-copy reads) without wasting space to padding.
 //!
-//! ## Sorting 1 billion entries
+//! ## Sorting ~17 GB data set (half a billion entries)
 //!
-//! ```
+//! ```sh
 //! $ time RUST_LOG=debug cargo run --release --example large_data_set -- -o /run/media/duncan/ssd_data/bench_data/ -t /run/media/duncan/ssd_data/tmp/
-//! Finished release [optimized] target(s) in 0.02s
-//! Running `target/release/examples/large_data_set`
-//! [2022-05-28T07:23:34Z INFO  large_data_set] Random input data set will contain 10 unsorted chunks of at most 100663296 entries each
-//! [2022-05-28T07:23:44Z INFO  large_data_set] Done generating random chunks
-//! [2022-05-28T07:24:11Z INFO  kv_par_merge_sort] All chunks sorted, only merge work remains
-//! [2022-05-28T07:24:12Z INFO  kv_par_merge_sort] Running merge of 10 persisted chunks
-//! [2022-05-28T07:25:03Z INFO  kv_par_merge_sort] Done merging! Performed 1 merge(s) total
+//! [2022-05-28T08:24:56Z INFO  large_data_set] Random input data set will contain 18 unsorted chunks of at most 28071681 entries each
+//! [2022-05-28T08:25:36Z INFO  large_data_set] Done generating random chunks
+//! [2022-05-28T08:26:00Z INFO  kv_par_merge_sort] Running merge of 16 persisted chunks
+//! [2022-05-28T08:26:01Z INFO  kv_par_merge_sort] All chunks sorted, only merge work remains
+//! [2022-05-28T08:27:02Z INFO  kv_par_merge_sort] Running merge of 3 persisted chunks
+//! [2022-05-28T08:28:30Z INFO  kv_par_merge_sort] Done merging! Performed 2 merge(s) total
 //!
-//! real    1m28.638s
-//! user    2m23.828s
-//! sys     0m15.272s
+//! real    3m33.830s
+//! user    3m31.733s
+//! sys     0m42.923s
 //! ```
 //!
 //! ## Implementation
