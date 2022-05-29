@@ -26,7 +26,7 @@ where
     }
 
     pub fn sort(&mut self) {
-        self.entries.sort_by(|(k1, _), (k2, _)| k1.cmp(k2))
+        self.entries.sort_unstable_by(|(k1, _), (k2, _)| k1.cmp(k2))
     }
 }
 
