@@ -4,7 +4,7 @@ use bytemuck::{bytes_of, bytes_of_mut, Pod};
 use core::cmp::Reverse;
 use std::collections::BinaryHeap;
 use std::fs::File;
-use std::io::{self, BufReader, BufWriter, Read, Write};
+use std::io::{self, BufReader, BufWriter};
 use std::path::Path;
 use tempfile::tempfile_in;
 
@@ -83,14 +83,14 @@ where
     )
 }
 
-fn write_element<T>(writer: &mut BufWriter<File>, value: &T) -> Result<(), io::Error>
+fn write_element<T>(mut writer: impl io::Write, value: &T) -> Result<(), io::Error>
 where
     T: Pod,
 {
     writer.write_all(bytes_of(value))
 }
 
-fn read_element<T>(reader: &mut BufReader<File>, value: &mut T) -> Result<bool, io::Error>
+fn read_element<T>(mut reader: impl io::Read, value: &mut T) -> Result<bool, io::Error>
 where
     T: Pod,
 {
