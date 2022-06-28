@@ -1,4 +1,4 @@
-use crate::SortedChunkFiles;
+use crate::chunk::SortedChunkFiles;
 
 use bytemuck::{bytes_of, bytes_of_mut, Pod};
 use core::cmp::Reverse;

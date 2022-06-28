@@ -21,10 +21,6 @@ where
         self.entries.len()
     }
 
-    pub fn is_empty(&self) -> bool {
-        self.entries.is_empty()
-    }
-
     pub fn sort(&mut self) {
         self.entries.sort_unstable_by(|(k1, _), (k2, _)| k1.cmp(k2))
     }

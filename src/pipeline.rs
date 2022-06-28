@@ -24,7 +24,7 @@ pub struct SortingPipeline<K, V> {
 
 /// Performance-tuning parameters for [`SortingPipeline`].
 pub struct Config {
-    /// The maximum number of [`Chunk`]s that can be sorted (and persisted) concurrently.
+    /// The maximum number of chunks that can be sorted (and persisted) concurrently.
     pub max_sort_concurrency: usize,
     /// The maximum number of merge operations that can occur concurrently.
     pub max_merge_concurrency: usize,
@@ -108,11 +108,11 @@ where
     /// Enqueues `chunk` for sorting.
     ///
     /// Sorting will occur automatically in the background. But sorting is only guaranteed to complete after calling `finish`.
-    pub fn submit_unsorted_chunk(&self, chunk: Chunk<K, V>) {
+    pub fn submit_unsorted_chunk(&self, chunk: Vec<(K, V)>) {
         if chunk.is_empty() {
             return;
         }
-        self.unsorted_chunk_tx.send(chunk).unwrap();
+        self.unsorted_chunk_tx.send(Chunk::new(chunk)).unwrap();
     }
 
     /// Finishes sorting, which ultimately creates sorted files at `output_key_path` and `output_value_path`.

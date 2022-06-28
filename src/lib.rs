@@ -2,7 +2,7 @@
 //!
 //! Sort [`Pod`](bytemuck::Pod) (key, value) data sets that don't fit in memory.
 //!
-//! This crate provides the `kv_par_merge_sort` library, which enables the user to sort [`Chunk`]s of (key, value) pairs (AKA
+//! This crate provides the `kv_par_merge_sort` library, which enables the user to sort chunks of (key, value) pairs (AKA
 //! entries) via a [`SortingPipeline`]. The sorted output lands in two files: one for keys and one for values. The keys file is
 //! sorted, while the values file is "parallel" to the key file.
 //!
@@ -29,18 +29,18 @@
 //! ## Implementation
 //!
 //! To sort an arbitrarily large data set without running out of memory, we must resort to an "external" sorting algorithm that
-//! uses the file system for scratch space; we use a parallel merge sort. Each [`Chunk`] is sorted separately, in parallel and
+//! uses the file system for scratch space; we use a parallel merge sort. Each chunk is sorted separately, in parallel and
 //! streamed to a pair of files. These files are consumed by a merging thread, which (also in parallel) iteratively merges
 //! groups of up to `merge_k` similarly-sized chunks.
 //!
 //! ## File Handles
 //!
-//! **WARNING**: It's possible to exceed your system's limit on open file handles if [`Chunk`]s are too small.
+//! **WARNING**: It's possible to exceed your system's limit on open file handles if chunks are too small.
 //!
 //! ## Memory Usage
 //!
-//! **WARNING**: If you are running out of memory, make sure you can actually fit `max_sort_concurrency` [`Chunk`]s in memory.
-//! Also note that [`std::env::temp_dir`] might actually be an in-memory `tmpfs`.
+//! **WARNING**: If you are running out of memory, make sure you can actually fit `max_sort_concurrency` chunks in memory. Also
+//! note that [`std::env::temp_dir`] might actually be an in-memory `tmpfs`.
 //!
 //! ## File System Usage
 //!
@@ -50,8 +50,6 @@ mod chunk;
 mod merge;
 mod pipeline;
 
-pub use chunk::*;
-pub use merge::*;
 pub use pipeline::*;
 
 #[cfg(test)]
@@ -124,7 +122,7 @@ mod tests {
         let expected_values: &[i32] = &[1];
         sorting_pipeline_test(
             |pipeline| {
-                pipeline.submit_unsorted_chunk(Chunk::new(vec![(0, 1)]));
+                pipeline.submit_unsorted_chunk(vec![(0, 1)]);
             },
             expected_keys,
             expected_values,
@@ -137,7 +135,7 @@ mod tests {
         let expected_values: &[i32] = &[1, 2];
         sorting_pipeline_test(
             |pipeline| {
-                pipeline.submit_unsorted_chunk(Chunk::new(vec![(0, 1), (1, 2)]));
+                pipeline.submit_unsorted_chunk(vec![(0, 1), (1, 2)]);
             },
             expected_keys,
             expected_values,
@@ -150,7 +148,7 @@ mod tests {
         let expected_values: &[i32] = &[1, 2];
         sorting_pipeline_test(
             |pipeline| {
-                pipeline.submit_unsorted_chunk(Chunk::new(vec![(1, 2), (0, 1)]));
+                pipeline.submit_unsorted_chunk(vec![(1, 2), (0, 1)]);
             },
             expected_keys,
             expected_values,
@@ -163,8 +161,8 @@ mod tests {
         let expected_values: &[i32] = &[1, 2];
         sorting_pipeline_test(
             |pipeline| {
-                pipeline.submit_unsorted_chunk(Chunk::new(vec![(1, 2)]));
-                pipeline.submit_unsorted_chunk(Chunk::new(vec![(0, 1)]));
+                pipeline.submit_unsorted_chunk(vec![(1, 2)]);
+                pipeline.submit_unsorted_chunk(vec![(0, 1)]);
             },
             expected_keys,
             expected_values,
@@ -177,9 +175,9 @@ mod tests {
         let expected_values: &[i32] = &[1, 2, 4, 8, 16];
         sorting_pipeline_test(
             |pipeline| {
-                pipeline.submit_unsorted_chunk(Chunk::new(vec![(1, 2), (0, 1)]));
-                pipeline.submit_unsorted_chunk(Chunk::new(vec![(3, 8), (4, 16)]));
-                pipeline.submit_unsorted_chunk(Chunk::new(vec![(2, 4)]));
+                pipeline.submit_unsorted_chunk(vec![(1, 2), (0, 1)]);
+                pipeline.submit_unsorted_chunk(vec![(3, 8), (4, 16)]);
+                pipeline.submit_unsorted_chunk(vec![(2, 4)]);
             },
             expected_keys,
             expected_values,

@@ -1,5 +1,5 @@
 use clap::Parser;
-use kv_par_merge_sort::{chunk_max_entries_from_memory_limit, Chunk, Config, SortingPipeline};
+use kv_par_merge_sort::{chunk_max_entries_from_memory_limit, Config, SortingPipeline};
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use std::path::PathBuf;
@@ -54,8 +54,8 @@ fn main() {
     let mut num_entries_remaining = args.num_entries;
     while num_entries_remaining > 0 {
         let chunk_size = max_entries_per_chunk.min(num_entries_remaining);
-        let chunk_data = (0..chunk_size).map(|_| rng.gen()).collect();
-        pipeline.submit_unsorted_chunk(Chunk::new(chunk_data));
+        let chunk = (0..chunk_size).map(|_| rng.gen()).collect();
+        pipeline.submit_unsorted_chunk(chunk);
         num_entries_remaining -= chunk_size;
         num_submitted += 1;
         log::debug!("# unsorted chunks submitted = {num_submitted}");
